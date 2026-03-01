@@ -7,7 +7,6 @@ from rapidfuzz import fuzz
 from sklearn.metrics.pairwise import cosine_similarity
 
 
-# MUST be defined before loading vectorizer
 def tokenize(x):
     return x
 
@@ -32,16 +31,15 @@ def load_models():
     price_vectors   = scaler_price.transform(backup[['price']])
     area_vectors    = scaler_area.transform(backup[['area']])
 
-    # Compute similarity matrices
     sim_rooms   = cosine_similarity(rooms_vectors)
     sim_price   = cosine_similarity(price_vectors)
     sim_area    = cosine_similarity(area_vectors)
     sim_address = cosine_similarity(address_vectors)
 
-    final_similarity = (0.10 * sim_rooms +
-                        0.10 * sim_price +
-                        0.10 * sim_area  +
-                        0.70 * sim_address)
+    final_similarity = (0.07 * sim_rooms +
+                        0.07 * sim_price +
+                        0.06 * sim_area  +
+                        0.80 * sim_address)
 
     return scaler_rooms, scaler_price, scaler_area, vectorizer, final_similarity, backup
 
@@ -59,7 +57,6 @@ def fuzzy_address_match(address_list, tokens, threshold=80):
 
 def hard_filter(beds=None, bath=None, price=None, area=None, address=None, fuzzy=False):
     filtered = backup.copy()
-
     if beds is not None:
         filtered = filtered[filtered['beds'] == beds]
     if bath is not None:
@@ -78,7 +75,6 @@ def hard_filter(beds=None, bath=None, price=None, area=None, address=None, fuzzy
             filtered = filtered[filtered['adress'].apply(
                 lambda x: any(token in x for token in tokens)
             )]
-
     return filtered
 
 
@@ -99,41 +95,9 @@ def parse_query(query):
     return beds, bath, price, area, address
 
 
-def query_to_similarity(beds=None, bath=None, price=None, area=None, address=None):
-    sims = []
-    weights = []
-
-    if beds is not None or bath is not None:
-        b  = beds if beds is not None else backup['beds'].mean()
-        bt = bath if bath is not None else backup['bath'].mean()
-        input_rooms = scaler_rooms.transform([[b, bt]])
-        sims.append(cosine_similarity(input_rooms, scaler_rooms.transform(backup[['beds', 'bath']]))[0])
-        weights.append(1)
-
-    if price is not None:
-        input_price = scaler_price.transform([[price]])
-        sims.append(cosine_similarity(input_price, scaler_price.transform(backup[['price']]))[0])
-        weights.append(1)
-
-    if area is not None:
-        input_area = scaler_area.transform([[area]])
-        sims.append(cosine_similarity(input_area, scaler_area.transform(backup[['area']]))[0])
-        weights.append(1)
-
-    if address is not None:
-        input_address = vectorizer.transform([address.lower().split()]).toarray()
-        sims.append(cosine_similarity(input_address, vectorizer.transform(backup['adress']).toarray())[0])
-        weights.append(1)
-
-    total = sum(weights)
-    final = sum((w / total) * s for w, s in zip(weights, sims))
-    return final
-
-
 def fetch_and_recommend(query, top_n=5):
     beds, bath, price, area, address = parse_query(query)
 
-    # Progressive hard filtering
     filtered = hard_filter(beds, bath, price, area, address)
     if filtered.empty:
         filtered = hard_filter(beds, bath, address=address)
@@ -156,13 +120,8 @@ def fetch_and_recommend(query, top_n=5):
     if filtered.empty:
         filtered = hard_filter(bath=bath)
 
-    # Pure cosine fallback
     if filtered.empty:
-        scores = query_to_similarity(beds, bath, price, area, address)
-        top_indices = scores.argsort()[::-1][:top_n]
-        result = backup.iloc[top_indices].copy()
-        result['similarity'] = scores[top_indices]
-        return None, result
+        return None, None
 
     best_index = filtered.index[0]
     best_match = backup.loc[best_index]
@@ -171,7 +130,6 @@ def fetch_and_recommend(query, top_n=5):
     scores = sorted(scores, key=lambda x: x[1], reverse=True)
     scores = [s for s in scores if s[0] != best_index]
 
-    # Diverse recommendations
     seen_addresses = set()
     diverse_indices = []
     for i, s in scores:
