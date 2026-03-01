@@ -22,10 +22,8 @@ def load_models():
     vectorizer   = joblib.load('vectorizer.pkl')
     backup       = pd.read_csv('backup.csv', index_col=0)
 
-    # Convert adress back to list
     backup['adress'] = backup['adress'].apply(lambda x: eval(x) if isinstance(x, str) else x)
 
-    # Recompute vectors
     address_vectors = vectorizer.transform(backup['adress']).toarray()
     rooms_vectors   = scaler_rooms.transform(backup[['beds', 'bath']])
     price_vectors   = scaler_price.transform(backup[['price']])
@@ -80,18 +78,18 @@ def hard_filter(beds=None, bath=None, price=None, area=None, address=None, fuzzy
 
 def parse_query(query):
     query = query.lower()
-    beds  = re.search(r'(\d+)\s*bed', query)
-    bath  = re.search(r'(\d+)\s*bath', query)
-    area  = re.search(r'(\d+)\s*(?:sqft|sft|sq)', query)
-    beds  = int(beds.group(1)) if beds else None
-    bath  = int(bath.group(1)) if bath else None
-    area  = int(area.group(1)) if area else None
+    beds    = re.search(r'(\d+)\s*bed', query)
+    bath    = re.search(r'(\d+)\s*bath', query)
+    area    = re.search(r'(\d+)\s*(?:sqft|sft|sq)', query)
+    beds    = int(beds.group(1)) if beds else None
+    bath    = int(bath.group(1)) if bath else None
+    area    = int(area.group(1)) if area else None
     address = re.sub(r'\d+\s*(?:bed|bath|tk|taka|bdt|sqft|sft|sq)?', '', query).strip()
     address = address if address else None
     numbers = re.findall(r'\b(\d+)\b', query)
-    used = [str(beds), str(bath), str(area)]
+    used    = [str(beds), str(bath), str(area)]
     price_candidates = [int(n) for n in numbers if n not in used]
-    price = max(price_candidates) if price_candidates else None
+    price   = max(price_candidates) if price_candidates else None
     return beds, bath, price, area, address
 
 
@@ -129,20 +127,10 @@ def fetch_and_recommend(query, top_n=5):
     scores = list(enumerate(final_similarity[best_index]))
     scores = sorted(scores, key=lambda x: x[1], reverse=True)
     scores = [s for s in scores if s[0] != best_index]
+    top_indices = [i for i, _ in scores[:top_n]]
 
-    seen_addresses = set()
-    diverse_indices = []
-    for i, s in scores:
-        addr = str(backup.iloc[i]['adress'])
-        if addr not in seen_addresses:
-            seen_addresses.add(addr)
-            diverse_indices.append((i, s))
-        if len(diverse_indices) == top_n:
-            break
-
-    top_indices = [i for i, _ in diverse_indices]
     result = backup.iloc[top_indices].copy()
-    result['similarity'] = [s for _, s in diverse_indices]
+    result['similarity'] = [s for _, s in scores[:top_n]]
     return best_match, result
 
 
