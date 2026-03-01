@@ -7,11 +7,13 @@ from rapidfuzz import fuzz
 from sklearn.metrics.pairwise import cosine_similarity
 
 
+# MUST be defined before loading vectorizer
 def tokenize(x):
     return x
 
 def preprocess(x):
     return x
+
 
 @st.cache_resource
 def load_models():
@@ -21,12 +23,16 @@ def load_models():
     vectorizer   = joblib.load('vectorizer.pkl')
     backup       = pd.read_csv('backup.csv', index_col=0)
 
-    # Recompute on startup
+    # Convert adress back to list
+    backup['adress'] = backup['adress'].apply(lambda x: eval(x) if isinstance(x, str) else x)
+
+    # Recompute vectors
     address_vectors = vectorizer.transform(backup['adress']).toarray()
     rooms_vectors   = scaler_rooms.transform(backup[['beds', 'bath']])
     price_vectors   = scaler_price.transform(backup[['price']])
     area_vectors    = scaler_area.transform(backup[['area']])
 
+    # Compute similarity matrices
     sim_rooms   = cosine_similarity(rooms_vectors)
     sim_price   = cosine_similarity(price_vectors)
     sim_area    = cosine_similarity(area_vectors)
@@ -38,6 +44,7 @@ def load_models():
                         0.70 * sim_address)
 
     return scaler_rooms, scaler_price, scaler_area, vectorizer, final_similarity, backup
+
 
 scaler_rooms, scaler_price, scaler_area, vectorizer, final_similarity, backup = load_models()
 
@@ -52,6 +59,7 @@ def fuzzy_address_match(address_list, tokens, threshold=80):
 
 def hard_filter(beds=None, bath=None, price=None, area=None, address=None, fuzzy=False):
     filtered = backup.copy()
+
     if beds is not None:
         filtered = filtered[filtered['beds'] == beds]
     if bath is not None:
@@ -64,12 +72,13 @@ def hard_filter(beds=None, bath=None, price=None, area=None, address=None, fuzzy
         tokens = address.lower().split()
         if fuzzy:
             filtered = filtered[filtered['adress'].apply(
-                lambda x: fuzzy_address_match(eval(x) if isinstance(x, str) else x, tokens)
+                lambda x: fuzzy_address_match(x, tokens)
             )]
         else:
             filtered = filtered[filtered['adress'].apply(
-                lambda x: any(token in (eval(x) if isinstance(x, str) else x) for token in tokens)
+                lambda x: any(token in x for token in tokens)
             )]
+
     return filtered
 
 
@@ -93,24 +102,29 @@ def parse_query(query):
 def query_to_similarity(beds=None, bath=None, price=None, area=None, address=None):
     sims = []
     weights = []
+
     if beds is not None or bath is not None:
         b  = beds if beds is not None else backup['beds'].mean()
         bt = bath if bath is not None else backup['bath'].mean()
         input_rooms = scaler_rooms.transform([[b, bt]])
         sims.append(cosine_similarity(input_rooms, scaler_rooms.transform(backup[['beds', 'bath']]))[0])
         weights.append(1)
+
     if price is not None:
         input_price = scaler_price.transform([[price]])
         sims.append(cosine_similarity(input_price, scaler_price.transform(backup[['price']]))[0])
         weights.append(1)
+
     if area is not None:
         input_area = scaler_area.transform([[area]])
         sims.append(cosine_similarity(input_area, scaler_area.transform(backup[['area']]))[0])
         weights.append(1)
+
     if address is not None:
         input_address = vectorizer.transform([address.lower().split()]).toarray()
         sims.append(cosine_similarity(input_address, vectorizer.transform(backup['adress']).toarray())[0])
         weights.append(1)
+
     total = sum(weights)
     final = sum((w / total) * s for w, s in zip(weights, sims))
     return final
@@ -119,6 +133,7 @@ def query_to_similarity(beds=None, bath=None, price=None, area=None, address=Non
 def fetch_and_recommend(query, top_n=5):
     beds, bath, price, area, address = parse_query(query)
 
+    # Progressive hard filtering
     filtered = hard_filter(beds, bath, price, area, address)
     if filtered.empty:
         filtered = hard_filter(beds, bath, address=address)
@@ -140,6 +155,8 @@ def fetch_and_recommend(query, top_n=5):
         filtered = hard_filter(beds=beds)
     if filtered.empty:
         filtered = hard_filter(bath=bath)
+
+    # Pure cosine fallback
     if filtered.empty:
         scores = query_to_similarity(beds, bath, price, area, address)
         top_indices = scores.argsort()[::-1][:top_n]
@@ -154,6 +171,7 @@ def fetch_and_recommend(query, top_n=5):
     scores = sorted(scores, key=lambda x: x[1], reverse=True)
     scores = [s for s in scores if s[0] != best_index]
 
+    # Diverse recommendations
     seen_addresses = set()
     diverse_indices = []
     for i, s in scores:
@@ -171,8 +189,9 @@ def fetch_and_recommend(query, top_n=5):
 
 
 # Streamlit UI
+st.set_page_config(page_title="Property Recommender", page_icon="🏠", layout="wide")
 st.title("🏠 Property Recommender")
-st.write("Search for a property and get similar recommendations")
+st.write("Search by area, beds, bath, price or any combination")
 
 query = st.text_input("Search", placeholder="e.g. 2 bed gulshan 50000")
 
@@ -184,21 +203,22 @@ if query:
         st.error("No properties found. Try a different search.")
     else:
         if best_match is not None:
-            st.subheader("Best Match")
+            st.subheader("🎯 Best Match")
             col1, col2, col3, col4 = st.columns(4)
-            col1.metric("Beds", best_match['beds'])
+            col1.metric("Beds",  best_match['beds'])
             col2.metric("Baths", best_match['bath'])
             col3.metric("Price", f"{best_match['price']:,.0f}")
-            col4.metric("Area", f"{best_match['area']:,.0f} sqft")
+            col4.metric("Area",  f"{best_match['area']:,.0f} sqft")
             st.write(f"📍 {best_match['adress']}")
             st.write(f"**{best_match['title']}**")
+            st.divider()
 
-        st.subheader("Similar Properties")
+        st.subheader("🏘️ Similar Properties")
         for _, row in results.iterrows():
-            with st.expander(f"{row['title']}  |  similarity: {row['similarity']:.2f}"):
+            with st.expander(f"🏠 {row['title']}  |  similarity: {row['similarity']:.2f}"):
                 c1, c2, c3, c4 = st.columns(4)
-                c1.metric("Beds", row['beds'])
+                c1.metric("Beds",  row['beds'])
                 c2.metric("Baths", row['bath'])
                 c3.metric("Price", f"{row['price']:,.0f}")
-                c4.metric("Area", f"{row['area']:,.0f} sqft")
+                c4.metric("Area",  f"{row['area']:,.0f} sqft")
                 st.write(f"📍 {row['adress']}")
