@@ -6,6 +6,10 @@ import re
 from rapidfuzz import fuzz
 from sklearn.metrics.pairwise import cosine_similarity
 
+# Helper functions
+def tokenize(x): return x
+def preprocess(x): return x
+
 # Load everything
 @st.cache_resource
 def load_models():
@@ -19,9 +23,7 @@ def load_models():
 
 scaler_rooms, scaler_price, scaler_area, vectorizer, final_similarity, backup = load_models()
 
-# Helper functions
-def tokenize(x): return x
-def preprocess(x): return x
+
 
 def fuzzy_address_match(address_list, tokens, threshold=80):
     for token in tokens:
@@ -149,3 +151,4 @@ if query:
                 c3.metric("Price", f"{row['price']:,.0f}")
                 c4.metric("Area", f"{row['area']:,.0f} sqft")
                 st.write(f"📍 {row['adress']}")
+
