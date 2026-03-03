@@ -61,7 +61,12 @@ STOPWORDS = {
     'property', 'apartment', 'flat', 'house', 'in', 'at', 'near',
     'with', 'and', 'the', 'a', 'an', 'for', 'rent', 'sale', 'available',
     'looking', 'want', 'need', 'find', 'me', 'i', 'is', 'are', 'bedroom',
-    'bathroom', 'room', 'rooms', 'bed', 'bath'
+    'bathroom', 'room', 'rooms', 'bed', 'bath',
+    'flat', 'duplex', 'studio', 'penthouse', 'villa', 'bungalow',
+    'modern', 'cozy', 'spacious', 'furnished', 'unfurnished',
+    'quiet', 'new', 'renovated', 'commercial', 'residential',
+    'family', 'bachelor', 'rooftop', 'garden', 'parking',
+    'cheap', 'good', 'nice', 'best', 'top', 'prime', 'great'
 }
 
 
@@ -281,3 +286,4 @@ if query:
                 c3.metric("Price", f"৳{row['price']:,.0f}")
                 c4.metric("Area",  f"{row['area']:,.0f} sqft")
                 st.write(f"📍 {', '.join(row['adress'])}")
+
