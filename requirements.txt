@@ -4,3 +4,5 @@ pandas
 numpy
 rapidfuzz
 joblib
+faiss-cpu
+sentence-transformers
