@@ -1,5 +1,6 @@
 import os
 import re
+import ast
 import joblib
 import faiss
 import numpy as np
@@ -10,6 +11,16 @@ from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity
 
 BASE = os.path.dirname(os.path.abspath(__file__))
+
+
+# ─── Address Parser ──────────────────────────────────────────────
+def parse_address(x):
+    if isinstance(x, list):
+        return [i.lower().strip() for i in x]
+    if isinstance(x, str):
+        x = x.strip().strip('[]').replace("'", "").replace('"', '')
+        return [i.lower().strip() for i in x.split(',') if i.strip()]
+    return []
 
 
 # ─── Load Everything ─────────────────────────────────────────────
@@ -25,11 +36,7 @@ def load_models():
     backup           = pd.read_csv(os.path.join(BASE, 'backup.csv'), index_col=0)
     sentence_model   = SentenceTransformer('all-MiniLM-L6-v2')
 
-    import ast
-
-    backup['adress'] = backup['adress'].apply(
-    lambda x: ast.literal_eval(x) if isinstance(x, str) and x.startswith('[') else
-              [i.strip() for i in x.split(',')] if isinstance(x, str) else x)
+    backup['adress'] = backup['adress'].apply(parse_address)
 
     avg_address_vec = address_vectors.mean(axis=0).reshape(1, -1)
     avg_title_vec   = title_vectors.mean(axis=0).reshape(1, -1)
@@ -70,9 +77,11 @@ def words_to_numbers(query):
 
 
 def fuzzy_address_match(address_list, tokens, threshold=80):
+    if isinstance(address_list, str):
+        address_list = [i.strip() for i in address_list.split(',')]
     for token in tokens:
         for item in address_list:
-            if fuzz.ratio(token, item) >= threshold:
+            if fuzz.ratio(token, item.lower().strip()) >= threshold:
                 return True
     return False
 
@@ -106,7 +115,7 @@ def hard_filter(beds=None, bath=None, price=None, area=None,
             )]
         else:
             filtered = filtered[filtered['adress'].apply(
-                lambda x: any(token in x for token in tokens)
+                lambda x: any(token in [i.lower() for i in x] for token in tokens)
             )]
     return filtered
 
@@ -259,7 +268,7 @@ if query:
             col2.metric("Baths", int(best_match['bath']))
             col3.metric("Price", f"৳{best_match['price']:,.0f}")
             col4.metric("Area",  f"{best_match['area']:,.0f} sqft")
-            st.write(f"📍 {best_match['adress']}")
+            st.write(f"📍 {', '.join(best_match['adress'])}")
             st.write(f"**{best_match['title']}**")
             st.divider()
 
@@ -271,6 +280,4 @@ if query:
                 c2.metric("Baths", int(row['bath']))
                 c3.metric("Price", f"৳{row['price']:,.0f}")
                 c4.metric("Area",  f"{row['area']:,.0f} sqft")
-                st.write(f"📍 {row['adress']}")
-
-
+                st.write(f"📍 {', '.join(row['adress'])}")
