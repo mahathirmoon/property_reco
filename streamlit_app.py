@@ -25,9 +25,12 @@ def load_models():
     backup           = pd.read_csv(os.path.join(BASE, 'backup.csv'), index_col=0)
     sentence_model   = SentenceTransformer('all-MiniLM-L6-v2')
 
-    backup['adress'] = backup['adress'].apply(
-        lambda x: eval(x) if isinstance(x, str) else x
-    )
+ import ast
+
+backup['adress'] = backup['adress'].apply(
+    lambda x: ast.literal_eval(x) if isinstance(x, str) and x.startswith('[') else
+              [i.strip() for i in x.split(',')] if isinstance(x, str) else x
+)
 
     avg_address_vec = address_vectors.mean(axis=0).reshape(1, -1)
     avg_title_vec   = title_vectors.mean(axis=0).reshape(1, -1)
@@ -270,3 +273,4 @@ if query:
                 c3.metric("Price", f"৳{row['price']:,.0f}")
                 c4.metric("Area",  f"{row['area']:,.0f} sqft")
                 st.write(f"📍 {row['adress']}")
+
