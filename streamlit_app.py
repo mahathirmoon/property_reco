@@ -1,25 +1,28 @@
-import streamlit as st
-import pandas as pd
-import numpy as np
+import os
+import re
 import joblib
 import faiss
-import re
+import numpy as np
+import pandas as pd
+import streamlit as st
 from rapidfuzz import fuzz
 from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity
+
+BASE = os.path.dirname(os.path.abspath(__file__))
 
 
 # ─── Load Everything ─────────────────────────────────────────────
 @st.cache_resource
 def load_models():
-    scaler_rooms     = joblib.load('scaler_rooms.pkl')
-    scaler_price     = joblib.load('scaler_price.pkl')
-    scaler_area      = joblib.load('scaler_area.pkl')
-    address_vectors  = np.load('address_vectors.npy')
-    title_vectors    = np.load('title_vectors.npy')
-    weighted_vectors = np.load('weighted_vectors.npy').astype('float32')
-    index            = faiss.read_index('property_index.faiss')
-    backup           = pd.read_csv('backup.csv', index_col=0)
+    scaler_rooms     = joblib.load(os.path.join(BASE, 'scaler_rooms.pkl'))
+    scaler_price     = joblib.load(os.path.join(BASE, 'scaler_price.pkl'))
+    scaler_area      = joblib.load(os.path.join(BASE, 'scaler_area.pkl'))
+    address_vectors  = np.load(os.path.join(BASE, 'address_vectors.npy'))
+    title_vectors    = np.load(os.path.join(BASE, 'title_vectors.npy'))
+    weighted_vectors = np.load(os.path.join(BASE, 'weighted_vectors.npy')).astype('float32')
+    index            = faiss.read_index(os.path.join(BASE, 'property_index.faiss'))
+    backup           = pd.read_csv(os.path.join(BASE, 'backup.csv'), index_col=0)
     sentence_model   = SentenceTransformer('all-MiniLM-L6-v2')
 
     backup['adress'] = backup['adress'].apply(
@@ -53,7 +56,7 @@ STOPWORDS = {
 }
 
 
-# ─── Helper Functions ─────────────────────────────────────────────
+# ─── Helper Functions ────────────────────────────────────────────
 def words_to_numbers(query):
     numbers = {
         'one': '1', 'two': '2', 'three': '3', 'four': '4', 'five': '5',
@@ -111,10 +114,10 @@ def parse_query(query):
     query = words_to_numbers(query)
 
     lowest_price  = any(w in query for w in
-                       ['low price', 'lowest price', 'cheap',
-                        'affordable', 'budget', 'low priced'])
+                        ['low price', 'lowest price', 'cheap',
+                         'affordable', 'budget', 'low priced'])
     highest_price = any(w in query for w in
-                       ['luxury', 'expensive', 'premium', 'high end'])
+                        ['luxury', 'expensive', 'premium', 'high end'])
 
     beds = re.search(r'(\d+)\s*bed', query)
     bath = re.search(r'(\d+)\s*bath', query)
@@ -145,7 +148,7 @@ def get_query_vector(beds=None, bath=None, price=None, area=None,
     bt = bath  if bath  is not None else backup['bath'].mean()
     p  = price if price is not None else backup['price'].mean()
     ar = area  if area  is not None else backup['area'].mean()
-    ad = address if address is not None else query if query else ''
+    ad = address if address is not None else (query if query else '')
     kw = query   if query   is not None else ''
 
     rooms_vec   = scaler_rooms.transform([[b, bt]])
@@ -168,7 +171,6 @@ def get_query_vector(beds=None, bath=None, price=None, area=None,
 
 def fetch_and_recommend(query, top_n=5):
     beds, bath, price, area, address, lowest_price, highest_price = parse_query(query)
-
     w_address, w_title = detect_query_intent(query)
 
     filtered = hard_filter(beds, bath, price, area, address)
@@ -217,7 +219,7 @@ def fetch_and_recommend(query, top_n=5):
 
         best_index = filtered.index[0]
         best_match = backup.loc[best_index]
-        result     = filtered.iloc[1:top_n+1].copy()
+        result     = filtered.iloc[1:top_n + 1].copy()
 
         if lowest_price:
             result = result.sort_values('price', ascending=True)
@@ -253,7 +255,7 @@ if query:
             col1, col2, col3, col4 = st.columns(4)
             col1.metric("Beds",  int(best_match['beds']))
             col2.metric("Baths", int(best_match['bath']))
-            col3.metric("Price", f"{best_match['price']:,.0f}")
+            col3.metric("Price", f"৳{best_match['price']:,.0f}")
             col4.metric("Area",  f"{best_match['area']:,.0f} sqft")
             st.write(f"📍 {best_match['adress']}")
             st.write(f"**{best_match['title']}**")
@@ -261,10 +263,10 @@ if query:
 
         st.subheader("🏘️ Similar Properties")
         for _, row in results.iterrows():
-            with st.expander(f"🏠 {row['title']}  |  similarity: {row['similarity']:.2f}"):
+            with st.expander(f"🏠 {row['title']}  |  match: {row['similarity']:.2f}"):
                 c1, c2, c3, c4 = st.columns(4)
                 c1.metric("Beds",  int(row['beds']))
                 c2.metric("Baths", int(row['bath']))
-                c3.metric("Price", f"{row['price']:,.0f}")
+                c3.metric("Price", f"৳{row['price']:,.0f}")
                 c4.metric("Area",  f"{row['area']:,.0f} sqft")
                 st.write(f"📍 {row['adress']}")
