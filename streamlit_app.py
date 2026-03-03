@@ -278,17 +278,3 @@ if query:
                 c3.metric("Price", f"{row['price']:,.0f}")
                 c4.metric("Area",  f"{row['area']:,.0f} sqft")
                 st.write(f"📍 {row['adress']}")
-```
-
-Push all files to GitHub:
-```
-app.py
-requirements.txt
-scaler_rooms.pkl
-scaler_price.pkl
-scaler_area.pkl
-address_vectors.npy
-title_vectors.npy
-weighted_vectors.npy
-property_index.faiss
-backup.csv
