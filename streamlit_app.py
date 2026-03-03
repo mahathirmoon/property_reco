@@ -9,14 +9,6 @@ from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity
 
 
-# ─── Must be defined before loading any pickled objects ──────────
-def tokenize(x):
-    return x
-
-def preprocess(x):
-    return x
-
-
 # ─── Load Everything ─────────────────────────────────────────────
 @st.cache_resource
 def load_models():
@@ -30,12 +22,10 @@ def load_models():
     backup           = pd.read_csv('backup.csv', index_col=0)
     sentence_model   = SentenceTransformer('all-MiniLM-L6-v2')
 
-    # Convert adress back to list
     backup['adress'] = backup['adress'].apply(
         lambda x: eval(x) if isinstance(x, str) else x
     )
 
-    # Precompute average vectors for intent detection
     avg_address_vec = address_vectors.mean(axis=0).reshape(1, -1)
     avg_title_vec   = title_vectors.mean(axis=0).reshape(1, -1)
 
@@ -208,14 +198,14 @@ def fetch_and_recommend(query, top_n=5):
         candidate_title_vecs = title_vectors[filtered.index.tolist()]
         title_scores         = cosine_similarity(query_title_vec, candidate_title_vecs)[0]
 
-        filtered             = filtered.copy()
+        filtered               = filtered.copy()
         filtered['similarity'] = title_scores
 
         if w_address > w_title:
             filtered = filtered.sort_values('similarity', ascending=False)
         else:
-            all_title_scores = cosine_similarity(query_title_vec, title_vectors)[0]
-            filtered         = backup.copy()
+            all_title_scores       = cosine_similarity(query_title_vec, title_vectors)[0]
+            filtered               = backup.copy()
             filtered['similarity'] = all_title_scores
             if beds is not None:
                 filtered = filtered[filtered['beds'] == beds]
